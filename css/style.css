@@ -1,0 +1,134 @@
+:root{
+  --bg:#f4f5f7; --panel:#fff; --ink:#1b1f24; --muted:#6b7380; --line:#d9dde3;
+  --accent:#1c4587; --accent2:#e8eefa; --danger:#c62828; --warn:#fff3c4; --ok:#2e7d32;
+  /* couleurs de lignes reprises du conducteur Meeting de l'Eure */
+  --c-presentation:#a4c2f4; --c-lineup:#b6d7a8; --c-resultat:#ead1dc;
+  --c-partenaires:#ff9cf0; --c-ceremonie:#1c4587; --c-alerte:#ffff00;
+  --c-tunnel:#f9cb9c; --c-technique:#d9d9d9; --c-protocole:#b4a7d6; --c-animation:#ffd966;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+button,input,select,textarea{font:inherit}
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;padding:8px 16px;background:#111827;color:#fff}
+.brand{font-weight:800;letter-spacing:.08em}
+.brand span{font-weight:400;opacity:.6;letter-spacing:0;margin-left:4px}
+#tabs{display:flex;gap:4px;flex-wrap:wrap}
+#tabs button{background:transparent;border:1px solid transparent;color:#cbd5e1;padding:6px 12px;border-radius:6px;cursor:pointer}
+#tabs button:hover{color:#fff;background:#1f2937}
+#tabs button.active{background:#fff;color:#111827;font-weight:600}
+.status{margin-left:auto;font-size:12px;opacity:.7}
+main{padding:16px;max-width:1700px;margin:0 auto}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.panel h2{margin:0 0 12px;font-size:17px}
+.panel h3{margin:16px 0 8px;font-size:15px}
+.hint{color:var(--muted);font-size:13px;margin:4px 0 12px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+label.f input,label.f select,label.f textarea{color:var(--ink)}
+input[type=text],input:not([type]),select,textarea{border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:#fff}
+textarea{width:100%;min-height:140px;font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.btn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 12px;cursor:pointer}
+.btn:hover{background:var(--accent2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.15)}
+.btn.danger{color:var(--danger)}
+.btn.small{padding:2px 8px;font-size:12px}
+.btn.icon{padding:2px 7px}
+table.grid{border-collapse:collapse;width:100%}
+table.grid th,table.grid td{border:1px solid var(--line);padding:4px 6px;text-align:left;vertical-align:top}
+table.grid th{background:#eef1f5;font-size:12px;position:sticky;top:0}
+.w-time{width:86px}.w-dur{width:64px}
+.tag{display:inline-block;font-size:11px;padding:1px 6px;border-radius:10px;background:#eef1f5;color:#334;margin-left:4px;white-space:nowrap}
+.tag.fixe{background:#fde2e2;color:var(--danger);font-weight:700}
+.tag.sec{background:#fff4d6;color:#8a5a00}
+.tag.sac{background:#eee;color:#777;text-decoration:line-through}
+.tag.naming{background:#e6f4ea;color:#1e5b2c}
+.muted{color:var(--muted)}
+
+/* ---------- Conducteur ---------- */
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.toolbar .sep{width:1px;height:24px;background:var(--line)}
+.cond-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:8px}
+.cond-head h1{margin:0;font-size:20px}
+.cond-head .sub{color:var(--muted)}
+table.cond{border-collapse:collapse;width:100%;background:#fff;font-size:12.5px}
+table.cond th,table.cond td{border:1px solid #c9ced6;padding:3px 6px;vertical-align:top}
+table.cond thead th{background:#111827;color:#fff;font-weight:600;position:sticky;top:46px;z-index:5;text-align:left}
+table.cond thead tr.groups th{background:#374151;font-size:11px;text-transform:uppercase;letter-spacing:.05em;text-align:center}
+table.cond td.n{color:var(--muted);text-align:right;width:34px}
+table.cond td.t{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap;width:70px}
+table.cond td.d{font-variant-numeric:tabular-nums;white-space:nowrap;width:52px;color:#333}
+table.cond td.a{min-width:220px;font-weight:600}
+table.cond td.cue{min-width:110px}
+table.cond td.zone{min-width:110px;font-size:11.5px;background:#fafafa}
+table.cond td.zone.on{background:#fff8e1;color:#7a5b00}
+table.cond td.zone.start{background:#ffe08a;font-weight:700;color:#222}
+tr.k-presentation td.a,tr.k-presentation td.cue{background:var(--c-presentation)}
+tr.k-startlist td.a,tr.k-startlist td.cue{background:var(--c-presentation)}
+tr.k-lineup td.a,tr.k-lineup td.cue{background:var(--c-lineup)}
+tr.k-resultat td.a,tr.k-resultat td.cue{background:var(--c-resultat)}
+tr.k-main td{font-weight:700}
+tr.k-main td.a{font-size:13.5px;background:#fff}
+tr.k-main td.t{background:#e8eefa}
+tr.k-partenaires td.a,tr.k-partenaires td.cue{background:var(--c-partenaires)}
+tr.k-animation td.a,tr.k-animation td.cue{background:var(--c-animation)}
+tr.k-ceremonie td.a,tr.k-ceremonie td.cue{background:var(--c-ceremonie);color:#fff}
+tr.k-protocole td.a,tr.k-protocole td.cue{background:var(--c-protocole)}
+tr.k-tunnel td.a,tr.k-tunnel td.cue{background:var(--c-tunnel)}
+tr.k-alerte td.a,tr.k-alerte td.cue{background:var(--c-alerte)}
+tr.k-technique td.a,tr.k-technique td.cue{background:var(--c-technique)}
+tr.k-info td{color:var(--muted);font-style:italic;font-weight:400}
+tr.k-autre td.a{background:#fff}
+tr.fixe td.t{background:#c62828 !important;color:#fff}
+tr.clash td.t{outline:3px solid #ff6d00;outline-offset:-3px}
+.clashmsg{display:block;font-size:11px;color:#b34700;font-weight:700}
+.wl{display:block;font-weight:400;font-size:11px;color:#444}
+.note{display:block;font-weight:400;font-size:11px;color:#555;font-style:italic}
+tr.prio-sacrifiable td.a{text-decoration:line-through;text-decoration-color:#999}
+tr.dim td{opacity:.35}
+.summary{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin:6px 0 10px}
+.summary b{font-variant-numeric:tabular-nums}
+.alertbox{background:#fff3e0;border:1px solid #ffb74d;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:13px}
+.alertbox ul{margin:4px 0 0 18px;padding:0}
+
+/* ---------- Programme ---------- */
+table.prog td{font-size:13px}
+table.prog tr.type-bloc td:first-child{border-left:4px solid var(--c-partenaires)}
+table.prog tr.type-course td:first-child{border-left:4px solid var(--accent)}
+table.prog tr.type-concours td:first-child{border-left:4px solid #e0a800}
+table.prog tr:hover td{background:#f7f9fc}
+.actions{white-space:nowrap}
+
+/* ---------- Routines ---------- */
+.routine{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:14px}
+.routine-head{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.routine-head input{font-weight:700;min-width:300px}
+.steps td input{width:100%;border:1px solid transparent;padding:3px 4px;background:transparent}
+.steps td input:hover,.steps td input:focus{border-color:var(--line);background:#fff}
+.steps td.sect{background:#eef1f5;font-weight:700;font-size:12px}
+
+/* ---------- Modale ---------- */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-start;justify-content:center;z-index:50;overflow:auto;padding:30px 10px}
+.modal.hidden{display:none}
+.modal-box{background:#fff;border-radius:12px;padding:18px;width:min(860px,100%)}
+.modal-box h2{margin-top:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.cuegrid{display:grid;grid-template-columns:140px 1fr;gap:6px;align-items:center}
+.cuegrid input{width:100%}
+.modal-foot{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+
+/* ---------- Impression ---------- */
+.print-only{display:none}
+@media print{
+  @page{size:A4 landscape;margin:8mm}
+  body{background:#fff;font-size:10px}
+  .no-print,.topbar,.toolbar,.alertbox{display:none !important}
+  .print-only{display:block}
+  main{padding:0;max-width:none}
+  table.cond{font-size:9.5px}
+  table.cond thead th{position:static}
+  table.cond tr{page-break-inside:avoid}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+.steps td:first-child{min-width:250px}
+.steps td select{padding:2px 4px;font-size:12px}
