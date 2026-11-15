@@ -9,7 +9,7 @@
 'use strict';
 
 const P = new URLSearchParams(location.search);
-const ROLE = P.get('poste') ? 'poste' : (P.has('regie') ? 'regie' : 'accueil');
+const ROLE = P.get('poste') ? 'poste' : (P.has('regie') ? 'regie' : (P.has('journal') ? 'journal' : 'accueil'));
 const POSTE = P.get('poste') || '';
 const $ = id => document.getElementById(id);
 const pad = n => String(n).padStart(2, '0');
@@ -27,7 +27,7 @@ const EV = P.get('e') || '';
 const PLAN_KEY = EV ? 'coordo.liveplan.' + EV : 'coordo.liveplan';
 function readLocalPlan() { try { return JSON.parse(localStorage.getItem(PLAN_KEY) || 'null'); } catch (e) { return null; } }
 let CODE = (P.get('code') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-if (!CODE && ROLE === 'regie') {
+if (!CODE && (ROLE === 'regie' || ROLE === 'journal')) {
   const lp = readLocalPlan();
   CODE = (lp && lp.code) || localStorage.getItem('coordo.live.code') || genCode();
   if (!(lp && lp.code)) localStorage.setItem('coordo.live.code', CODE);
@@ -91,8 +91,21 @@ function showConn() {
 /* ---------------- Données partagées ---------------- */
 let PLAN = null;           // { event, postes, rows, publishedAt }
 let LIVE = blankLive();    // { cur, curStart, adj, hist, log, msg }
-function blankLive() { return { cur: -1, curStart: 0, adj: {}, hist: [], log: {}, msg: null }; }
-function normLive(l) { l = Object.assign(blankLive(), l || {}); l.adj = l.adj || {}; l.hist = l.hist || []; l.log = l.log || {}; return l; }
+function blankLive() { return { cur: -1, curStart: 0, adj: {}, hist: [], log: {}, msg: null, journal: [], notes: {} }; }
+function normLive(l) { l = Object.assign(blankLive(), l || {}); l.adj = l.adj || {}; l.hist = l.hist || []; l.log = l.log || {}; l.journal = l.journal || []; l.notes = l.notes || {}; return l; }
+const plainLabel = r => r ? r.label + (r.of ? ' — ' + r.of : '') : '';
+/* Journal : chaque action de la régie est notée avec son heure (pour le RETEX) */
+function jlog(e) { e.at = e.at || Sync.now(); LIVE.journal.push(e); if (LIVE.journal.length > 3000) LIVE.journal.shift(); }
+/* Archives du journal, gardées dans ce navigateur par événement */
+const retexKey = () => 'coordo.retex.' + (EV || CODE);
+function readArchives() { try { return JSON.parse(localStorage.getItem(retexKey()) || '[]'); } catch (e) { return []; } }
+function archiveLive(label) {
+  if (!PLAN || !LIVE.journal.length) return false;
+  const a = readArchives();
+  a.push({ id: 'a' + Date.now().toString(36), at: Date.now(), label: label || '', plan: PLAN, live: clean(LIVE) });
+  localStorage.setItem(retexKey(), JSON.stringify(a));
+  return true;
+}
 
 /* Projection : à partir de l'état réel, calcule l'heure prévue de chaque ligne.
    - Les lignes déjà passées gardent leur heure réelle.
@@ -178,6 +191,12 @@ function regieInit() {
           <button class="b small" id="msg-clear">Effacer le message affiché</button>
         </div>
         <div class="card">
+          <h3>Journal</h3>
+          <div class="msgrow"><input id="note-text" placeholder="Note rapide (rattachée à l'action en cours)…" maxlength="300"><button class="b" id="note-add">Noter</button></div>
+          <div id="jr-last" class="jr-last"></div>
+          <a class="b small" id="jr-open" target="_blank">Ouvrir le journal complet / RETEX</a>
+        </div>
+        <div class="card">
           <h3>Liens des postes</h3>
           <p class="hint">Chaque poste ouvre son lien (ou scanne le QR code) sur son téléphone, sa tablette ou son ordinateur.</p>
           <div id="links"></div>
@@ -234,10 +253,17 @@ function top(toIndex) {
   if (i < 0) { flash('Fin du conducteur'); return; }
   LIVE.hist.push({ cur: LIVE.cur, curStart: LIVE.curStart }); if (LIVE.hist.length > 30) LIVE.hist.shift();
   LIVE.cur = i; LIVE.curStart = Sync.now(); LIVE.log[PLAN.rows[i].id] = LIVE.curStart;
+  const r = PLAN.rows[i];
+  jlog({ at: LIVE.curStart, type: 'top', rowId: r.id, label: plainLabel(r), planned: r.t, delta: Math.round(tod(LIVE.curStart) - r.t), fixed: !!r.fixed });
   pushLive();
 }
-function undo() { const h = LIVE.hist.pop(); if (!h) return; if (LIVE.cur >= 0 && PLAN.rows[LIVE.cur]) delete LIVE.log[PLAN.rows[LIVE.cur].id]; LIVE.cur = h.cur; LIVE.curStart = h.curStart; pushLive(); }
-function setAdj(id, patch) { const a = Object.assign({}, LIVE.adj[id] || {}, patch); Object.keys(a).forEach(k => { if (a[k] == null || a[k] === false) delete a[k]; }); if (Object.keys(a).length) LIVE.adj[id] = a; else delete LIVE.adj[id]; pushLive(); }
+function undo() { const h = LIVE.hist.pop(); if (!h) return; if (LIVE.cur >= 0 && PLAN.rows[LIVE.cur]) { delete LIVE.log[PLAN.rows[LIVE.cur].id]; jlog({ type: 'undo', rowId: PLAN.rows[LIVE.cur].id, label: plainLabel(PLAN.rows[LIVE.cur]) }); } LIVE.cur = h.cur; LIVE.curStart = h.curStart; pushLive(); }
+function setAdj(id, patch) {
+  const r = PLAN.rows.find(x => x.id === id);
+  if (patch.skip === true) jlog({ type: 'skip', rowId: id, label: plainLabel(r), val: r ? (LIVE.adj[id] && LIVE.adj[id].dur != null ? LIVE.adj[id].dur : r.dur) : 0 });
+  else if (patch.skip === null) jlog({ type: 'unskip', rowId: id, label: plainLabel(r) });
+  if ('dur' in patch) jlog({ type: 'dur', rowId: id, label: plainLabel(r), from: r ? r.dur : null, val: patch.dur == null ? (r ? r.dur : null) : patch.dur });
+  const a = Object.assign({}, LIVE.adj[id] || {}, patch); Object.keys(a).forEach(k => { if (a[k] == null || a[k] === false) delete a[k]; }); if (Object.keys(a).length) LIVE.adj[id] = a; else delete LIVE.adj[id]; pushLive(); }
 function flash(t) { const el = document.createElement('div'); el.className = 'toast'; el.textContent = t; document.body.appendChild(el); setTimeout(() => el.remove(), 2200); }
 
 let lastSig = {};
@@ -287,6 +313,7 @@ function regieRender(force) {
       <td class="ac">${lab(r)} ${tagsHtml(r)}${r.threat ? `<div class="thr">⚠ menacé : ${fmtD(r.threat)} de retard</div>` : ''}</td>
       ${PLAN.postes.map(p => `<td>${esc(cueOf(r, p.id))}</td>`).join('')}</tr>`).join('')}
     </tbody></table>`);
+  setHtml('jr-last', LIVE.journal.slice(-5).reverse().map(e => `<div class="jl"><span>${fmtT(tod(e.at))}</span> ${journalText(e)}</div>`).join('') || '<span class="hint">Rien pour l\'instant.</span>');
   // message
   const m = LIVE.msg;
   $('msg-last').innerHTML = m && m.text ? `Affiché : « <b>${esc(m.text)}</b> » → ${esc(m.to === 'all' ? 'tous' : posteLabel(m.to))} (${fmtT(tod(m.at))})` : 'Aucun message affiché.';
@@ -347,14 +374,28 @@ function regieEvents() {
   $('btn-republish').onclick = () => {
     const lp = readLocalPlan();
     if (!lp) { alert('Aucun conducteur trouvé : ouvre l\'éditeur et clique « ▶ Passer en LIVE ».'); return; }
-    remapLive(PLAN, lp); PLAN = lp; Sync.set('plan', PLAN); pushLive(); flash('Conducteur rechargé');
+    remapLive(PLAN, lp); PLAN = lp; jlog({ type: 'plan' }); Sync.set('plan', PLAN); pushLive(); flash('Conducteur rechargé');
   };
-  $('btn-reset').onclick = () => { if (confirm('Remettre le live à zéro ? (tous les tops, suppressions et messages seront effacés)')) { LIVE = blankLive(); pushLive(); } };
+  $('btn-reset').onclick = () => {
+    if (!confirm('Remettre le live à zéro ? (tous les tops, suppressions, messages et notes seront effacés)')) return;
+    if (LIVE.journal.length && confirm('Archiver d\'abord le journal de ce live (pour le RETEX) ?')) archiveLive('avant remise à zéro');
+    LIVE = blankLive(); pushLive();
+  };
+  $('note-add').onclick = () => { const r = LIVE.cur >= 0 ? PLAN.rows[LIVE.cur] : null; addNote($('note-text').value, r ? r.id : null); $('note-text').value = ''; };
+  $('note-text').addEventListener('keydown', e => { if (e.key === 'Enter') $('note-add').click(); });
+  $('jr-open').href = 'live.html?journal=1' + (EV ? '&e=' + encodeURIComponent(EV) : '') + '&code=' + CODE;
   const fc = fbConfig(); if (fc && fc.from === 'navigateur') $('fb-text').value = JSON.stringify(fc.cfg, null, 1);
   $('fb-save').onclick = () => { const c = parseFirebaseSnippet($('fb-text').value); if (!c) { alert('Configuration non reconnue : il faut le bloc firebaseConfig avec « databaseURL ».'); return; } localStorage.setItem('coordo.fbcfg', JSON.stringify(c)); location.reload(); };
   $('fb-del').onclick = () => { localStorage.removeItem('coordo.fbcfg'); location.reload(); };
 }
-function sendMsg(text) { LIVE.msg = { id: Math.random().toString(36).slice(2, 8), text, to: $('msg-to').value || 'all', at: Sync.now() }; pushLive(); flash('Message envoyé'); }
+function sendMsg(text) { LIVE.msg = { id: Math.random().toString(36).slice(2, 8), text, to: $('msg-to').value || 'all', at: Sync.now() }; jlog({ type: 'msg', text, to: LIVE.msg.to }); pushLive(); flash('Message envoyé'); }
+function addNote(text, rowId) {
+  text = (text || '').trim(); if (!text) return;
+  const r = rowId ? PLAN.rows.find(x => x.id === rowId) : null;
+  if (r) LIVE.notes[r.id] = (LIVE.notes[r.id] ? LIVE.notes[r.id] + ' / ' : '') + text;
+  jlog({ type: 'note', text, rowId: r ? r.id : null, label: plainLabel(r) });
+  pushLive(); flash('Note ajoutée au journal');
+}
 function openRowMenu(i, e) {
   const r = PLAN.rows[i]; const a = LIVE.adj[r.id] || {}; const dur = a.dur != null ? a.dur : r.dur;
   const m = $('rowmenu');
@@ -363,9 +404,10 @@ function openRowMenu(i, e) {
     <div class="rm-dur"><button class="b" data-m="minus" data-i="${i}">−15"</button><span>Durée ${fmtD(dur)}</span><button class="b" data-m="plus" data-i="${i}">+15"</button>
       ${a.dur != null ? `<button class="b small" data-m="resetdur" data-i="${i}">durée d'origine (${fmtD(r.dur)})</button>` : ''}</div>
     ${a.skip ? `<button class="b" data-m="unskip" data-i="${i}">Rétablir la ligne</button>` : `<button class="b danger" data-m="skip" data-i="${i}">Supprimer la ligne du live</button>`}
-    ${r.sub ? `<button class="b" data-m="skipitem" data-i="${i}">Supprimer toute la séquence (${esc(itemName(r))})</button>` : ''}`;
+    ${r.sub ? `<button class="b" data-m="skipitem" data-i="${i}">Supprimer toute la séquence (${esc(itemName(r))})</button>` : ''}
+    <button class="b" data-m="note" data-i="${i}">📝 Annoter cette ligne (journal)</button>`;
   m.classList.remove('hidden');
-  const x = Math.min(e.clientX, window.innerWidth - 340), y = Math.min(e.clientY, window.innerHeight - 220);
+  const x = Math.min(e.clientX, window.innerWidth - m.offsetWidth - 8), y = Math.max(8, Math.min(e.clientY, window.innerHeight - m.offsetHeight - 8));
   m.style.left = x + 'px'; m.style.top = y + 'px';
 }
 function itemName(r) { const mr = PLAN.rows.find(x => x.itemId === r.itemId && x.main); return mr ? mr.label : ''; }
@@ -377,7 +419,8 @@ function rowAction(act, i) {
   if (act === 'resetdur') setAdj(r.id, { dur: null });
   if (act === 'skip') setAdj(r.id, { skip: true });
   if (act === 'unskip') setAdj(r.id, { skip: null });
-  if (act === 'skipitem') { PLAN.rows.forEach(x => { if (x.itemId === r.itemId && x.i !== LIVE.cur) { LIVE.adj[x.id] = Object.assign({}, LIVE.adj[x.id] || {}, { skip: true }); } }); pushLive(); }
+  if (act === 'skipitem') { jlog({ type: 'skipitem', rowId: r.id, label: itemName(r) }); PLAN.rows.forEach((x, k) => { if (x.itemId === r.itemId && k !== LIVE.cur) { LIVE.adj[x.id] = Object.assign({}, LIVE.adj[x.id] || {}, { skip: true }); } }); pushLive(); }
+  if (act === 'note') { const t = prompt('Note sur « ' + r.label + ' » :', (LIVE.notes[r.id] || '')); if (t != null) addNote(t, r.id); }
 }
 function posteUrl(p) {
   const u = new URL('live.html', location.href); u.search = '';
@@ -455,6 +498,125 @@ function posteRender(force) {
 function cuesMini(r) { const c = PLAN.postes.filter(p => cueOf(r, p.id)); return c.length ? `<div class="cues">${c.map(p => `<div class="cue"><span>${lab(p)}</span><b>${esc(cueOf(r, p.id))}</b></div>`).join('')}</div>` : ''; }
 
 /* =====================================================================
+   JOURNAL / RETEX
+   ===================================================================== */
+const posteName = to => to === 'all' ? 'tous les postes' : posteLabel(to);
+function deltaTxt(d) { if (d == null) return ''; if (Math.abs(d) < 15) return 'à l\'heure'; return d > 0 ? '+' + fmtD(d) + ' de retard' : fmtD(-d) + ' d\'avance'; }
+function journalText(e) {
+  switch (e.type) {
+    case 'top': return `<b>TOP</b> ${esc(e.label)} <span class="${e.delta >= 15 ? 'late' : (e.delta <= -15 ? 'early' : 'muted')}">(prévu ${fmtT(e.planned)} · ${deltaTxt(e.delta)})</span>${e.fixed ? ' <span class="tg fixe">FIXE</span>' : ''}`;
+    case 'undo': return `↩ Top annulé : ${esc(e.label)}`;
+    case 'skip': return `✂ Supprimé : ${esc(e.label)}${e.val ? ' (−' + fmtD(e.val) + ')' : ''}`;
+    case 'skipitem': return `✂ Séquence supprimée : ${esc(e.label)}`;
+    case 'unskip': return `Rétabli : ${esc(e.label)}`;
+    case 'dur': return `⏱ Durée modifiée : ${esc(e.label)} → ${fmtD(e.val)}${e.from != null ? ' (prévu ' + fmtD(e.from) + ')' : ''}`;
+    case 'msg': return `💬 Message à ${esc(posteName(e.to))} : « ${esc(e.text)} »`;
+    case 'note': return `📝 <b>${esc(e.text)}</b>${e.label ? ' <span class="muted">— ' + esc(e.label) + '</span>' : ''}`;
+    case 'plan': return '🔄 Conducteur rechargé depuis l\'éditeur';
+    default: return esc(e.type);
+  }
+}
+function journalText2(e) { const d = document.createElement('div'); d.innerHTML = journalText(e); return d.textContent; }
+/* Analyse d'un live : une ligne par action du conducteur */
+function analyse(plan, live) {
+  const rows = plan.rows.map((r, i) => {
+    const a = (live.adj || {})[r.id] || {};
+    const real = live.log[r.id] != null ? tod(live.log[r.id]) : null;
+    return { i, r, real, delta: real != null ? Math.round(real - r.t) : null, skip: !!a.skip, durAdj: a.dur, note: (live.notes || {})[r.id] || '' };
+  });
+  const topped = rows.filter(x => x.real != null).sort((a, b) => a.real - b.real);
+  topped.forEach((x, k) => { const n = topped[k + 1]; x.realDur = n ? Math.round(n.real - x.real) : null; });
+  const s = { nbRows: rows.length, nbTop: topped.length };
+  if (topped.length) {
+    s.first = topped[0]; s.last = topped[topped.length - 1];
+    s.maxLate = topped.reduce((m, x) => (x.delta > (m ? m.delta : 0) ? x : m), null);
+    s.maxEarly = topped.reduce((m, x) => (x.delta < (m ? m.delta : 0) ? x : m), null);
+  }
+  s.skipped = rows.filter(x => x.skip);
+  s.skippedTime = s.skipped.reduce((t, x) => t + (x.r.dur || 0), 0);
+  s.durChanged = rows.filter(x => x.durAdj != null);
+  s.fixed = rows.filter(x => x.r.fixed);
+  s.overruns = topped.filter(x => x.realDur != null && x.r.dur > 0 && x.realDur - (x.durAdj != null ? x.durAdj : x.r.dur) >= 30).sort((a, b) => (b.realDur - b.r.dur) - (a.realDur - a.r.dur)).slice(0, 8);
+  const j = live.journal || [];
+  s.msgs = j.filter(e => e.type === 'msg'); s.notes = j.filter(e => e.type === 'note'); s.undos = j.filter(e => e.type === 'undo');
+  return { rows, s };
+}
+let JR = { src: 'live', archive: null };
+function journalInit() {
+  const aid = P.get('a');
+  const arch = readArchives();
+  if (aid) { JR.archive = arch.find(a => a.id === aid) || null; JR.src = 'archive'; }
+  $('live').innerHTML = `<div class="journal"><div id="jr"></div></div>`;
+  if (JR.archive) { PLAN = JR.archive.plan; LIVE = normLive(JR.archive.live); journalRender(); return; }
+  Sync.on(d => { if (d.plan) PLAN = d.plan; else { const lp = readLocalPlan(); if (lp) PLAN = lp; } LIVE = normLive(d.live); journalRender(); });
+}
+function journalRender() {
+  const el = $('jr');
+  if (!PLAN) { el.innerHTML = '<div class="empty">Aucun live trouvé pour ce code.</div>'; return; }
+  const { rows, s } = analyse(PLAN, LIVE);
+  const arch = readArchives();
+  const ev = PLAN.event || {};
+  const fixedTxt = s.fixed.map(x => `<li>${fmtT(x.r.t)} ${esc(plainLabel(x.r))} : ${x.skip ? 'supprimée' : (x.real == null ? 'non topée' : `topée ${fmtT(x.real)} — <b class="${Math.abs(x.delta) < 15 ? 'ok' : (x.delta > 0 ? 'late' : 'early')}">${deltaTxt(x.delta)}</b>`)}</li>`).join('');
+  el.innerHTML = `
+  <div class="jr-head no-print">
+    <div><h1>Journal du live — RETEX</h1><div class="muted">${esc(ev.name || '')}${ev.date ? ' · ' + esc(ev.date) : ''} · code ${esc(CODE)}</div></div>
+    <div class="jr-tools">
+      <select id="jr-src"><option value="">Live en cours (temps réel)</option>${arch.map(a => `<option value="${a.id}" ${JR.archive && JR.archive.id === a.id ? 'selected' : ''}>Archive du ${new Date(a.at).toLocaleString('fr-FR')}${a.label ? ' — ' + esc(a.label) : ''}</option>`).join('')}</select>
+      ${JR.src === 'live' ? '<button class="b primary" id="jr-arch">Archiver ce journal</button>' : '<button class="b danger" id="jr-del">Supprimer cette archive</button>'}
+      <button class="b" id="jr-xls">Export Excel</button>
+      <button class="b" id="jr-print">Imprimer / PDF</button>
+    </div>
+  </div>
+  <h1 class="print-only">Journal du live — RETEX · ${esc(ev.name || '')}</h1>
+  <section class="jr-sum">
+    <div class="kpi"><span>Début</span><b>${s.first ? fmtT(s.first.real) : '—'}</b><i>${s.first ? 'prévu ' + fmtT(s.first.r.t) : ''}</i></div>
+    <div class="kpi"><span>Dernier top</span><b>${s.last ? fmtT(s.last.real) : '—'}</b><i>${s.last ? 'prévu ' + fmtT(s.last.r.t) + ' · ' + deltaTxt(s.last.delta) : ''}</i></div>
+    <div class="kpi"><span>Retard maximum</span><b class="late">${s.maxLate ? '+' + fmtD(s.maxLate.delta) : '—'}</b><i>${s.maxLate ? fmtT(s.maxLate.real) + ' · ' + esc(plainLabel(s.maxLate.r)) : ''}</i></div>
+    <div class="kpi"><span>Avance maximum</span><b class="early">${s.maxEarly ? fmtD(-s.maxEarly.delta) : '—'}</b><i>${s.maxEarly ? fmtT(s.maxEarly.real) + ' · ' + esc(plainLabel(s.maxEarly.r)) : ''}</i></div>
+    <div class="kpi"><span>Tops</span><b>${s.nbTop} / ${s.nbRows}</b><i>${s.undos.length} annulation(s)</i></div>
+    <div class="kpi"><span>Lignes supprimées</span><b>${s.skipped.length}</b><i>${s.skippedTime ? fmtD(s.skippedTime) + ' gagnés' : ''}</i></div>
+    <div class="kpi"><span>Messages</span><b>${s.msgs.length}</b><i>${s.notes.length} note(s)</i></div>
+  </section>
+  <div class="jr-cols">
+    <section><h2>Contraintes fixes</h2>${fixedTxt ? `<ul>${fixedTxt}</ul>` : '<p class="muted">Aucune.</p>'}
+      <h2>Plus gros dépassements</h2>${s.overruns.length ? `<ul>${s.overruns.map(x => `<li>${esc(plainLabel(x.r))} : ${fmtD(x.realDur)} au lieu de ${fmtD(x.durAdj != null ? x.durAdj : x.r.dur)} (<b class="late">+${fmtD(x.realDur - (x.durAdj != null ? x.durAdj : x.r.dur))}</b>)</li>`).join('')}</ul>` : '<p class="muted">Aucun dépassement de plus de 30".</p>'}
+      <h2>Notes</h2>${s.notes.length ? `<ul>${s.notes.map(e => `<li>${fmtT(tod(e.at))} — <b>${esc(e.text)}</b>${e.label ? ' <span class="muted">(' + esc(e.label) + ')</span>' : ''}</li>`).join('')}</ul>` : '<p class="muted">Aucune note.</p>'}
+    </section>
+    <section><h2>Chronologie</h2><div class="chrono">${(LIVE.journal || []).map(e => `<div class="jl t-${e.type}"><span>${fmtT(tod(e.at))}</span> ${journalText(e)}</div>`).join('') || '<p class="muted">Journal vide.</p>'}</div></section>
+  </div>
+  <h2>Détail ligne par ligne</h2>
+  <table class="jt" id="jr-table"><thead><tr><th>N°</th><th>Prévu</th><th>Réel</th><th>Écart</th><th>Durée prévue</th><th>Durée réelle</th><th>Action</th><th>Statut</th><th>Note</th></tr></thead><tbody>
+  ${rows.map(x => `<tr class="${x.skip ? 'skipped' : ''} ${x.r.main ? 'main' : ''}"><td>${x.i + 1}</td><td>${fmtT(x.r.t)}</td><td>${x.real != null ? fmtT(x.real) : ''}</td>
+    <td class="${x.delta >= 15 ? 'late' : (x.delta <= -15 ? 'early' : '')}">${x.delta == null ? '' : (Math.abs(x.delta) < 15 ? '0' : (x.delta > 0 ? '+' : '−') + fmtD(Math.abs(x.delta)))}</td>
+    <td>${fmtD(x.durAdj != null ? x.durAdj : x.r.dur)}${x.durAdj != null ? ' <i class="muted">(' + fmtD(x.r.dur) + ')</i>' : ''}</td><td>${x.realDur != null ? fmtD(x.realDur) : ''}</td>
+    <td>${esc(plainLabel(x.r))}${x.r.fixed ? ' <span class="tg fixe">FIXE</span>' : ''}</td><td>${x.skip ? 'supprimée' : (x.real != null ? 'topée' : 'non topée')}</td><td>${esc(x.note)}</td></tr>`).join('')}
+  </tbody></table>`;
+  $('jr-src').onchange = e => { const u = new URL(location.href); if (e.target.value) u.searchParams.set('a', e.target.value); else u.searchParams.delete('a'); location.href = u.toString(); };
+  if ($('jr-arch')) $('jr-arch').onclick = () => { const l = prompt('Nom de l\'archive (facultatif) :', ''); if (l == null) return; if (archiveLive(l)) { flash('Journal archivé'); journalRender(); } else alert('Le journal est vide.'); };
+  if ($('jr-del')) $('jr-del').onclick = () => { if (!confirm('Supprimer cette archive ?')) return; localStorage.setItem(retexKey(), JSON.stringify(readArchives().filter(a => a.id !== JR.archive.id))); const u = new URL(location.href); u.searchParams.delete('a'); location.href = u.toString(); };
+  $('jr-print').onclick = () => window.print();
+  $('jr-xls').onclick = () => journalXls(rows, s);
+}
+function journalXls(rows, s) {
+  const ev = PLAN.event || {};
+  const st = 'border:1px solid #999;font-family:Arial;font-size:10pt;mso-number-format:"\\@";';
+  const th = 'border:1px solid #999;font-family:Arial;font-size:10pt;background:#111827;color:#fff;';
+  const html = `<html><head><meta charset="utf-8"></head><body>
+    <h2>Journal du live — ${esc(ev.name || '')} ${esc(ev.date || '')}</h2>
+    <table><tr><td style="${st}">Début réel</td><td style="${st}">${s.first ? fmtT(s.first.real) : ''}</td></tr>
+    <tr><td style="${st}">Dernier top</td><td style="${st}">${s.last ? fmtT(s.last.real) + ' (' + deltaTxt(s.last.delta) + ')' : ''}</td></tr>
+    <tr><td style="${st}">Retard maximum</td><td style="${st}">${s.maxLate ? '+' + fmtD(s.maxLate.delta) + ' — ' + esc(plainLabel(s.maxLate.r)) : ''}</td></tr>
+    <tr><td style="${st}">Lignes supprimées</td><td style="${st}">${s.skipped.length}</td></tr></table><br>
+    <table><tr>${['N°', 'Prévu', 'Réel', 'Écart (s)', 'Durée prévue', 'Durée réelle', 'Action', 'Statut', 'Note'].map(h => `<th style="${th}">${h}</th>`).join('')}</tr>
+    ${rows.map(x => `<tr>${[x.i + 1, fmtT(x.r.t), x.real != null ? fmtT(x.real) : '', x.delta == null ? '' : x.delta, fmtD(x.durAdj != null ? x.durAdj : x.r.dur), x.realDur != null ? fmtD(x.realDur) : '', plainLabel(x.r) + (x.r.fixed ? ' [FIXE]' : ''), x.skip ? 'supprimée' : (x.real != null ? 'topée' : 'non topée'), x.note].map(v => `<td style="${st}">${esc(v)}</td>`).join('')}</tr>`).join('')}</table><br>
+    <h3>Chronologie</h3><table><tr><th style="${th}">Heure</th><th style="${th}">Événement</th></tr>
+    ${(LIVE.journal || []).map(e => `<tr><td style="${st}">${fmtT(tod(e.at))}</td><td style="${st}">${esc(journalText2(e))}</td></tr>`).join('')}</table></body></html>`;
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + html], { type: 'application/vnd.ms-excel' }));
+  a.download = ('journal_' + (ev.name || 'live')).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_').slice(0, 60) + '.xls';
+  document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 500);
+}
+
+/* =====================================================================
    ACCUEIL (aucun paramètre)
    ===================================================================== */
 function accueilInit() {
@@ -471,10 +633,11 @@ function accueilInit() {
 /* ---------------- Démarrage ---------------- */
 (async function start() {
   if (ROLE === 'accueil') { accueilInit(); return; }
-  if (ROLE === 'regie') regieInit(); else posteInit();
+  if (ROLE === 'journal') { journalInit(); if (JR.archive) { document.title = 'Coordo — Journal'; return; } }
+  else if (ROLE === 'regie') regieInit(); else posteInit();
   await Sync.init();
   showConn();
-  document.title = 'Coordo — ' + (ROLE === 'regie' ? 'Régie' : posteLabel(POSTE));
+  document.title = 'Coordo — ' + (ROLE === 'regie' ? 'Régie' : (ROLE === 'journal' ? 'Journal' : posteLabel(POSTE)));
 })();
 window.COORDO_LIVE = { project, get plan() { return PLAN; }, get live() { return LIVE; }, top, undo, tod };
 })();

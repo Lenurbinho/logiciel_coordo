@@ -154,3 +154,5 @@ body.is-home #tabs{display:none}
 .ev-actions{display:flex;gap:6px;flex-wrap:wrap;padding:10px 16px;border-top:1px solid var(--line);background:#fafbfc}
 a.btn{text-decoration:none;color:inherit;display:inline-block}
 a.btn.primary{color:#fff}
+.retex-row{padding:6px 0;border-top:1px solid var(--line)}
+.retex-row a{font-weight:600;color:var(--accent)}

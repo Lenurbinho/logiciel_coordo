@@ -42,6 +42,10 @@ Outil de coordination (« topage ») pour événements sportifs, surtout l'athl�
   Projection du retard : une ligne démarre au plus tôt à son heure prévue et après la fin de
   la précédente (le retard se résorbe dans les trous) ; une ligne FIXE ne bouge jamais
   (« menacée » si retard).
+- Journal / RETEX : `LIVE.journal` (tops avec écart, annulations, suppressions, durées, messages,
+  notes) + `LIVE.notes` par ligne. Page `live.html?journal=1&e=<id>&code=…` (synthèse, chronologie,
+  détail ligne par ligne, export Excel, impression). Archives dans `coordo.retex.<id>`
+  (incluses dans l'export .json de l'événement).
 - `js/firebase-config.js` : config Firebase (null = mode local). Mode d'emploi : `docs/firebase.md`.
 
 Voir `docs/cahier-des-charges.md`.

@@ -153,3 +153,39 @@ summary{cursor:pointer;color:var(--muted);font-size:13px}
 .nx-small-cue span{color:var(--muted);text-transform:uppercase;font-size:10.5px;letter-spacing:.05em}
 @media (max-width:800px){.nx-wrap{flex-direction:column}.nx-after{width:auto;border-left:0;padding-left:0}}
 .rg-title a{color:#93c5fd}
+
+.early{color:#93c5fd}.ok{color:#86efac}
+.jr-last{margin:6px 0;font-size:12.5px}
+.jl{padding:3px 0;border-top:1px solid var(--line);font-size:13px}
+.jl span:first-child{font-variant-numeric:tabular-nums;color:var(--muted);margin-right:6px}
+.journal{max-width:1300px;margin:0 auto;padding:16px}
+.jr-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.jr-head h1{margin:0 0 4px}
+.jr-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.jr-sum{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;margin:16px 0}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.kpi span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.kpi b{display:block;font-size:24px;font-variant-numeric:tabular-nums}
+.kpi i{display:block;font-size:12px;color:var(--muted);font-style:normal}
+.jr-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media (max-width:900px){.jr-cols{grid-template-columns:1fr}}
+.journal h2{font-size:15px;margin:16px 0 6px;color:#cbd5e1}
+.journal ul{margin:0;padding-left:18px;font-size:13.5px;line-height:1.6}
+.chrono{max-height:420px;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 10px}
+table.jt{width:100%;border-collapse:collapse;font-size:12.5px}
+table.jt th{background:#05080d;color:var(--muted);text-align:left;padding:5px;font-size:11px;text-transform:uppercase}
+table.jt td{border-top:1px solid var(--line);padding:4px 5px;font-variant-numeric:tabular-nums}
+table.jt tr.main td{font-weight:700}
+table.jt tr.skipped td{opacity:.45;text-decoration:line-through}
+.print-only{display:none}
+@media print{
+  body,html{background:#fff;color:#000}
+  .no-print,.conn{display:none !important}
+  .print-only{display:block}
+  .kpi,.chrono{background:#fff;border-color:#bbb;color:#000}
+  .chrono{max-height:none;overflow:visible}
+  table.jt th{background:#eee;color:#000}
+  table.jt td,.jl{border-color:#ccc}
+  .late{color:#b91c1c}.early{color:#1d4ed8}.muted,.kpi span,.kpi i{color:#555}
+  .journal h2{color:#000}
+}

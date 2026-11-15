@@ -142,7 +142,12 @@ function libStore(d) {
   libWrite(l);
 }
 function libLoad(id) { try { const raw = localStorage.getItem(evKey(id)); return raw ? normalize(JSON.parse(raw)) : null; } catch (e) { return null; } }
-function libAdd(d, name) { d = normalize(d); d.id = 'e' + uid(); d.liveCode = ''; if (name) d.event.name = name; libStore(d); return d.id; }
+function libAdd(d, name, keepRetex) {
+  const retex = keepRetex && d.retex ? d.retex : null; delete d.retex;
+  d = normalize(d); d.id = 'e' + uid(); d.liveCode = ''; if (name) d.event.name = name; libStore(d);
+  if (retex && retex.length) localStorage.setItem('coordo.retex.' + d.id, JSON.stringify(retex));
+  return d.id;
+}
 function libInit() {
   if (localStorage.getItem(LIB_KEY)) return;
   // première ouverture : on récupère l'événement de l'ancienne version, sinon la démo
@@ -473,6 +478,9 @@ function renderConducteur() {
   <p class="print-only muted">Édité le ${new Date().toLocaleString('fr-FR')} — Coordo</p>`;
 }
 
+function retexList(id) { try { return JSON.parse(localStorage.getItem('coordo.retex.' + id) || '[]'); } catch (e) { return []; } }
+function withRetex(d) { const r = retexList(d.id); return r.length ? Object.assign({}, d, { retex: r }) : d; }
+
 /* ---------- Accueil : liste des événements ---------- */
 function renderHome() {
   const l = libRead().sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.updated - a.updated);
@@ -508,6 +516,13 @@ function renderFichiers() {
       <button class="btn" data-act="file-open">📂 Importer un fichier .json (nouvel événement)…</button>
       <button class="btn" data-act="home-dup" data-id="${S.id}">Dupliquer cet événement</button>
     </div>
+  </div>
+  <div class="panel"><h2>Journaux des lives (RETEX)</h2>
+    <p class="hint">Pendant le live, la régie note chaque top (heure réelle, avance / retard), les suppressions, les changements de durée, les messages et tes notes. Le journal du live en cours et les journaux archivés se consultent ici.</p>
+    <div class="toolbar">
+      <a class="btn primary" href="live.html?journal=1&e=${encodeURIComponent(S.id)}${S.liveCode ? '&code=' + S.liveCode : ''}" target="_blank">Journal du live en cours</a>
+    </div>
+    ${retexList(S.id).map(a => `<div class="retex-row"><a href="live.html?journal=1&e=${encodeURIComponent(S.id)}&a=${a.id}${S.liveCode ? '&code=' + S.liveCode : ''}" target="_blank">📒 Archive du ${new Date(a.at).toLocaleString('fr-FR')}${a.label ? ' — ' + esc(a.label) : ''}</a> <span class="muted">${(a.live.journal || []).filter(e => e.type === 'top').length} tops</span></div>`).join('') || '<p class="muted">Aucune archive pour l\'instant (bouton « Archiver ce journal » dans la page Journal).</p>'}
   </div>
   <div class="panel" id="import"><h2>Importer un horaire</h2>
     <p class="hint">Copie depuis Excel / Google Sheets les colonnes <b>Épreuve</b> et <b>Heure</b> (et éventuellement <b>Heure de fin</b> pour les concours), puis colle ci-dessous. Les concours (hauteur, perche, longueur, triple, poids, disque, javelot, marteau) sont reconnus automatiquement. Les lignes contenant « cérémonie », « animation » ou « protocole » deviennent des blocs.</p>
@@ -655,7 +670,7 @@ document.addEventListener('click', e => {
     case 'print': window.print(); return;
     case 'go-live': publishLive(); return;
     case 'export-xls': exportXls(); return;
-    case 'file-save': download(new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }), fileBase() + '.json'); return;
+    case 'file-save': download(new Blob([JSON.stringify(withRetex(S), null, 1)], { type: 'application/json' }), fileBase() + '.json'); return;
     case 'file-open': document.getElementById('file-open').click(); return;
     case 'go-home': flushSave(); location.hash = ''; S = null; render(); return;
     case 'home-new': { ui.tab = 'event'; saveUi(); openEvent(libAdd(blankEvent())); return; }
@@ -668,11 +683,11 @@ document.addEventListener('click', e => {
       if (S) openEvent(id); else render();
       return;
     }
-    case 'home-export': { const d = libLoad(b.dataset.id); if (!d) return; const keep = S; S = d; const n = fileBase(); S = keep; download(new Blob([JSON.stringify(d, null, 1)], { type: 'application/json' }), n + '.json'); return; }
+    case 'home-export': { const d = libLoad(b.dataset.id); if (!d) return; const keep = S; S = d; const n = fileBase(); S = keep; download(new Blob([JSON.stringify(withRetex(d), null, 1)], { type: 'application/json' }), n + '.json'); return; }
     case 'home-del': {
       const e = libRead().find(x => x.id === b.dataset.id); if (!e) return;
       if (!confirm('Supprimer définitivement « ' + e.name + ' » de ce navigateur ?\n(Exporte-le d\'abord en .json si tu veux le garder.)')) return;
-      localStorage.removeItem(evKey(e.id)); localStorage.removeItem('coordo.liveplan.' + e.id);
+      localStorage.removeItem(evKey(e.id)); localStorage.removeItem('coordo.liveplan.' + e.id); localStorage.removeItem('coordo.retex.' + e.id);
       libWrite(libRead().filter(x => x.id !== e.id)); render(); return;
     }
     case 'import-go': doImport(); return;
@@ -701,7 +716,7 @@ document.addEventListener('change', e => {
     const rd = new FileReader();
     rd.onload = () => {
       let id = null;
-      try { const d = JSON.parse(rd.result); if (!d || !d.event) throw new Error(); id = libAdd(d); }
+      try { const d = JSON.parse(rd.result); if (!d || !d.event) throw new Error(); id = libAdd(d, null, true); }
       catch (err) { alert('Fichier illisible : ce n\'est pas un fichier Coordo (.json).'); }
       el.value = '';
       if (id) { flushSave(); ui.tab = 'conducteur'; saveUi(); openEvent(id); setStatus('Fichier importé : ' + f.name); }

@@ -23,5 +23,6 @@ L'accueil liste tous les événements gardés dans le navigateur : ouvrir, dupli
   de lignes, messages aux postes, liens + QR codes par poste.
 - Postes (lecture seule) : `live.html?code=XXXXXX&poste=dj` — heure, action en cours,
   compte à rebours jusqu'à **sa** prochaine action, consignes suivantes, messages de la régie.
+- Journal / RETEX : chaque top, avance/retard, suppression, changement de durée, message et note est enregistré ; page de bilan avec export Excel, impression et archivage.
 - Synchronisation entre appareils : Firebase — voir `docs/firebase.md`. Sans configuration :
   mode local (onglets d'un même navigateur).
