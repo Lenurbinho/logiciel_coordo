@@ -132,3 +132,6 @@ table.prog tr:hover td{background:#f7f9fc}
 }
 .steps td:first-child{min-width:250px}
 .steps td select{padding:2px 4px;font-size:12px}
+
+.live-link{margin-left:8px;background:#c62828;color:#fff;text-decoration:none;font-weight:700;padding:6px 12px;border-radius:6px}
+.live-link:hover{filter:brightness(1.15)}

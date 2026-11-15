@@ -32,4 +32,13 @@ Outil de coordination (« topage ») pour événements sportifs, surtout l'athl�
   envisagé, avec correction d'horloge serveur pour des comptes à rebours identiques).
 - Tout le texte de l'interface en français.
 
+## Fichiers
+- `index.html` + `js/app.js` : éditeur de conducteur. Bouton « Passer en LIVE » → écrit le plan
+  dans localStorage (`coordo.liveplan`) et ouvre la régie.
+- `live.html` + `js/live.js` : régie (`?regie=1`), postes (`?code=…&poste=…`), accueil.
+  Projection du retard : une ligne démarre au plus tôt à son heure prévue et après la fin de
+  la précédente (le retard se résorbe dans les trous) ; une ligne FIXE ne bouge jamais
+  (« menacée » si retard).
+- `js/firebase-config.js` : config Firebase (null = mode local). Mode d'emploi : `docs/firebase.md`.
+
 Voir `docs/cahier-des-charges.md`.

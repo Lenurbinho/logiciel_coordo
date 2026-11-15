@@ -412,6 +412,8 @@ function renderConducteur() {
     <label>Vue : <select data-ui="view"><option value="tous">Conducteur complet</option>${S.postes.map(p => `<option value="${p.id}"${ui.view === p.id ? ' selected' : ''}>Poste ${esc(p.label)}</option>`).join('')}</select></label>
     ${single ? `<label><input type="checkbox" data-ui="hideEmpty" ${ui.hideEmpty ? 'checked' : ''}> Masquer les lignes sans consigne</label>` : ''}
     <span class="sep"></span>
+    <button class="btn primary" data-act="go-live">▶ Passer en LIVE</button>
+    <span class="sep"></span>
     <button class="btn" data-act="print">Imprimer / PDF</button>
     <button class="btn" data-act="export-xls">Export Excel</button>
     <span class="sep"></span>
@@ -520,6 +522,25 @@ function exportXls() {
 function fileBase() { return ('conducteur_' + (S.event.name || 'evenement')).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w-]+/g, '_').replace(/_+/g, '_').slice(0, 60); }
 function download(blob, name) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); }
 
+/* ---------- Envoi du conducteur vers le module Live ---------- */
+function livePlan() {
+  const { rows } = buildRows();
+  const count = {};
+  const names = {}; S.items.forEach(i => { names[i.id] = i.name; });
+  const out = rows.filter(r => r.kind !== 'info').map(r => {
+    count[r.itemId] = (count[r.itemId] || 0) + 1;
+    return { id: r.itemId + '_' + count[r.itemId], itemId: r.itemId, t: r.t, dur: r.dur || 0, kind: r.kind, label: r.label,
+      cues: stripEmpty(r.cues || {}), fixed: !!r.fixed, prio: r.prio || 'essentiel', main: !!r.main, sub: !!r.sub,
+      of: r.sub ? (names[r.itemId] || '') : '', naming: r.naming || '', wavelight: r.wavelight || '', notes: r.notes || '', type: r.type || (r.main ? 'bloc' : '') };
+  });
+  return { event: S.event, postes: S.postes.map(p => ({ id: p.id, label: p.label })), rows: out, publishedAt: Date.now() };
+}
+function publishLive() {
+  try { localStorage.setItem('coordo.liveplan', JSON.stringify(livePlan())); }
+  catch (e) { alert('Impossible de préparer le live : ' + e.message); return; }
+  window.open('live.html?regie=1', 'coordo-regie');
+}
+
 /* ---------------- Événements utilisateur ---------------- */
 function move(arr, i, d) { const j = i + d; if (j < 0 || j >= arr.length) return; [arr[i], arr[j]] = [arr[j], arr[i]]; }
 function stepRef(ref) { const [ri, part, si] = ref.split('|'); return { r: S.routines[+ri], part, si: si == null ? null : +si }; }
@@ -572,6 +593,7 @@ document.addEventListener('click', e => {
     case 'step-del': { const { r, part, si } = stepRef(b.dataset.ref); r[part].splice(si, 1); break; }
     case 'step-up': { const { r, part, si } = stepRef(b.dataset.ref); move(r[part], si, -1); break; }
     case 'print': window.print(); return;
+    case 'go-live': publishLive(); return;
     case 'export-xls': exportXls(); return;
     case 'file-save': download(new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }), fileBase() + '.json'); return;
     case 'file-open': document.getElementById('file-open').click(); return;
@@ -615,5 +637,5 @@ load();
 render();
 setStatus('Prêt');
 // exposé pour les tests
-window.COORDO = { get state() { return S; }, buildRows, parseT, parseD, fmtT, fmtD, estimateRun };
+window.COORDO = { get state() { return S; }, buildRows, livePlan, parseT, parseD, fmtT, fmtD, estimateRun };
 })();
