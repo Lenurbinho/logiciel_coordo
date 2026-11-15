@@ -255,9 +255,16 @@ function regieRender(force) {
     <div class="count ${cur.remain < 0 ? 'over' : (cur.remain <= 10 ? 'soon' : '')}">${cur.dur ? (cur.remain >= 0 ? 'reste ' + fmtCount(cur.remain) : 'dépassement ' + fmtCount(cur.remain)) : 'écoulé ' + fmtCount(cur.elapsed)}</div>
     ${cuesTable(cur)}${cur.wavelight ? `<div class="wl">Wave light : ${esc(cur.wavelight)}</div>` : ''}${cur.notes ? `<div class="note">${esc(cur.notes)}</div>` : ''}`
     : `<div class="lbl">LIVE PAS ENCORE LANCÉ</div><div class="row-title">${nxt ? 'Premier top : ' + lab(nxt) + ' à ' + fmtT(nxt.t) : ''}</div><div class="hint">Appuie sur TOP au moment où la première action démarre.</div>`);
-  setHtml('rg-next', nxt ? `<div class="lbl">PROCHAIN TOP <span class="since">prévu ${fmtT(nxt.t)}${nxt.delta >= 15 ? ' → ' + fmtT(nxt.proj) : ''}</span></div>
+  const after2 = todo.slice(1, 3);
+  setHtml('rg-next', nxt ? `<div class="nx-wrap"><div class="nx-main">
+    <div class="lbl">PROCHAIN TOP <span class="since">prévu ${fmtT(nxt.t)}${nxt.delta >= 15 ? ' → ' + fmtT(nxt.proj) : ''}</span></div>
     <div class="nx"><span class="nx-count ${nxt.proj - nowS <= 10 ? 'soon' : ''}">${fmtCount(nxt.proj - nowS)}</span>
-    <span class="row-title ${kindClass(nxt)}">${lab(nxt)} ${tagsHtml(nxt)}</span></div>${cuesTable(nxt)}` : '<div class="lbl">FIN DU CONDUCTEUR</div>');
+    <span class="row-title ${kindClass(nxt)}">${lab(nxt)} ${tagsHtml(nxt)}</span></div>${cuesTable(nxt)}</div>
+    ${after2.length ? `<div class="nx-after"><div class="lbl">ENSUITE</div>${after2.map(r => `<div class="nx-small ${kindClass(r)}">
+      <div class="nx-small-head"><span class="nx-small-count">${fmtCount(r.proj - nowS)}</span><span class="nx-small-time">${fmtT(r.proj)}${r.delta >= 15 ? ` <i class="late">+${fmtD(r.delta)}</i>` : ''}</span></div>
+      <div class="nx-small-title">${lab(r)} ${tagsHtml(r)}</div>
+      ${PLAN.postes.filter(p => cueOf(r, p.id)).map(p => `<div class="nx-small-cue"><span>${esc(p.label)}</span> ${esc(cueOf(r, p.id))}</div>`).join('')}</div>`).join('')}</div>` : ''}
+    </div>` : '<div class="lbl">FIN DU CONDUCTEUR</div>');
   // alerte contrainte fixe
   setHtml('rg-alert', fixedAlert(rows));
   // liste à venir (40 lignes)
