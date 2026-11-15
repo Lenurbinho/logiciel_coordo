@@ -136,7 +136,7 @@ function kindClass(r) { return 'k-' + (r.kind || 'autre'); }
 function delayHtml(d) {
   if (d == null) return '';
   if (Math.abs(d) < 15) return '<span class="dl ok">à l\'heure</span>';
-  return d > 0 ? `<span class="dl late">+${fmtD(d)} de retard</span>` : `<span class="dl early">${fmtD(-d)} d'avance</span>`;
+  return d > 0 ? `<span class="dl late">+${fmtD(d)} de retard</span>` : `<span class="dl early">en avance de ${fmtD(-d)}</span>`;
 }
 
 /* =====================================================================
@@ -252,8 +252,13 @@ function regieRender(force) {
   const cur = rows.find(r => r.state === 'current');
   const todo = rows.filter(r => r.state === 'todo');
   const nxt = todo[0];
-  // retard global = retard projeté du prochain top (ou du top en cours)
-  const d = nxt ? nxt.delta : (cur ? cur.delta : null);
+  // Retard : le prochain top est projeté après son heure prévue (dès 15").
+  // Avance : le top en cours a été lancé au moins 1 minute avant son heure prévue
+  // (les tops suivants ne sont jamais projetés en avance, d'où ce calcul sur la ligne en cours).
+  let d = null;
+  if (nxt && nxt.delta >= 15) d = nxt.delta;
+  else if (cur && cur.delta <= -60) d = cur.delta;
+  else if (nxt || cur) d = 0;
   setHtml('rg-delay', delayHtml(d));
   // en cours
   setHtml('rg-now', cur ? `<div class="lbl">EN COURS <span class="since">topé à ${fmtT(cur.proj)} (prévu ${fmtT(cur.t)})</span></div>
