@@ -23,8 +23,15 @@ function tod(ms) { const d = new Date(ms); return d.getHours() * 3600 + d.getMin
 
 /* ---------------- Code de l'événement ---------------- */
 function genCode() { const a = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; let c = ''; for (let i = 0; i < 6; i++) c += a[Math.floor(Math.random() * a.length)]; return c; }
+const EV = P.get('e') || '';
+const PLAN_KEY = EV ? 'coordo.liveplan.' + EV : 'coordo.liveplan';
+function readLocalPlan() { try { return JSON.parse(localStorage.getItem(PLAN_KEY) || 'null'); } catch (e) { return null; } }
 let CODE = (P.get('code') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-if (!CODE && ROLE === 'regie') { CODE = localStorage.getItem('coordo.live.code') || genCode(); localStorage.setItem('coordo.live.code', CODE); }
+if (!CODE && ROLE === 'regie') {
+  const lp = readLocalPlan();
+  CODE = (lp && lp.code) || localStorage.getItem('coordo.live.code') || genCode();
+  if (!(lp && lp.code)) localStorage.setItem('coordo.live.code', CODE);
+}
 
 /* ---------------- Configuration Firebase ---------------- */
 function fbConfig() {
@@ -136,12 +143,11 @@ function delayHtml(d) {
    RÉGIE
    ===================================================================== */
 function regieInit() {
-  let localPlan = null;
-  try { localPlan = JSON.parse(localStorage.getItem('coordo.liveplan') || 'null'); } catch (e) {}
+  const localPlan = readLocalPlan();
   $('live').innerHTML = `
   <div class="regie">
     <header class="rg-top">
-      <div class="rg-title"><b id="rg-event"></b><span>RÉGIE · code <b>${CODE}</b></span></div>
+      <div class="rg-title"><b id="rg-event"></b><span>RÉGIE · code <b>${CODE}</b>${EV ? ` · <a href="index.html#e=${esc(EV)}" target="_blank">ouvrir l'éditeur</a>` : ''}</span></div>
       <div class="rg-clock" id="rg-clock">--:--:--</div>
       <div class="rg-delay" id="rg-delay"></div>
     </header>
@@ -334,7 +340,7 @@ function regieEvents() {
   $('msg-text').addEventListener('keydown', e => { if (e.key === 'Enter') $('msg-send').click(); });
   $('msg-clear').onclick = () => { LIVE.msg = null; pushLive(); };
   $('btn-republish').onclick = () => {
-    let lp = null; try { lp = JSON.parse(localStorage.getItem('coordo.liveplan') || 'null'); } catch (e) {}
+    const lp = readLocalPlan();
     if (!lp) { alert('Aucun conducteur trouvé : ouvre l\'éditeur et clique « ▶ Passer en LIVE ».'); return; }
     remapLive(PLAN, lp); PLAN = lp; Sync.set('plan', PLAN); pushLive(); flash('Conducteur rechargé');
   };

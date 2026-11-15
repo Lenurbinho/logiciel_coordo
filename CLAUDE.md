@@ -33,8 +33,11 @@ Outil de coordination (« topage ») pour événements sportifs, surtout l'athl�
 - Tout le texte de l'interface en français.
 
 ## Fichiers
-- `index.html` + `js/app.js` : éditeur de conducteur. Bouton « Passer en LIVE » → écrit le plan
-  dans localStorage (`coordo.liveplan`) et ouvre la régie.
+- `index.html` + `js/app.js` : accueil « Mes événements » + éditeur de conducteur.
+  Bibliothèque dans localStorage : `coordo.lib` (index) + `coordo.ev.<id>` (un événement).
+  L'événement ouvert est dans l'adresse (`#e=<id>`) → plusieurs onglets possibles.
+  Chaque événement a son code live (`liveCode`). « Passer en LIVE » écrit le plan dans
+  `coordo.liveplan.<id>` et ouvre `live.html?regie=1&e=<id>`.
 - `live.html` + `js/live.js` : régie (`?regie=1`), postes (`?code=…&poste=…`), accueil.
   Projection du retard : une ligne démarre au plus tôt à son heure prévue et après la fin de
   la précédente (le retard se résorbe dans les trous) ; une ligne FIXE ne bouge jamais

@@ -125,18 +125,50 @@ function normItem(it, d) {
   if (it.time == null && !it.chain) it.chain = true;
   return it;
 }
+/* ---------- Bibliothèque d'événements (plusieurs événements dans le navigateur) ----------
+   coordo.lib        : liste [{id, name, date, lieu, count, updated}]
+   coordo.ev.<id>    : contenu complet d'un événement
+   L'événement ouvert dans un onglet est indiqué dans l'adresse (#e=<id>),
+   on peut donc en ouvrir plusieurs dans plusieurs onglets. */
+const LIB_KEY = 'coordo.lib';
+const evKey = id => 'coordo.ev.' + id;
+function libRead() { try { return JSON.parse(localStorage.getItem(LIB_KEY) || '[]'); } catch (e) { return []; } }
+function libWrite(l) { localStorage.setItem(LIB_KEY, JSON.stringify(l)); }
+function libEntry(d) { return { id: d.id, name: d.event.name, date: d.event.date, lieu: d.event.lieu, count: d.items.filter(i => i.type !== 'bloc').length, updated: Date.now() }; }
+function libStore(d) {
+  localStorage.setItem(evKey(d.id), JSON.stringify(d));
+  const l = libRead(); const e = libEntry(d); const i = l.findIndex(x => x.id === d.id);
+  if (i >= 0) l[i] = e; else l.push(e);
+  libWrite(l);
+}
+function libLoad(id) { try { const raw = localStorage.getItem(evKey(id)); return raw ? normalize(JSON.parse(raw)) : null; } catch (e) { return null; } }
+function libAdd(d, name) { d = normalize(d); d.id = 'e' + uid(); d.liveCode = ''; if (name) d.event.name = name; libStore(d); return d.id; }
+function libInit() {
+  if (localStorage.getItem(LIB_KEY)) return;
+  // première ouverture : on récupère l'événement de l'ancienne version, sinon la démo
+  let old = null; try { old = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); } catch (e) {}
+  libWrite([]);
+  libAdd(clone(window.COORDO_DEMO || {}));
+  if (old) libAdd(old);
+}
+function currentIdFromHash() { const m = location.hash.match(/e=([\w-]+)/); return m ? m[1] : null; }
 function load() {
-  try { const raw = localStorage.getItem(STORE_KEY); if (raw) { S = normalize(JSON.parse(raw)); return; } } catch (e) {}
-  S = normalize(clone(window.COORDO_DEMO || {}));
+  libInit();
+  const id = currentIdFromHash();
+  S = id ? libLoad(id) : null;
+  if (id && !S) history.replaceState(null, '', location.pathname + location.search);
 }
+function openEvent(id) { location.hash = 'e=' + id; }
+window.addEventListener('hashchange', () => { flushSave(); load(); if (S && ui.tab === 'home') ui.tab = 'conducteur'; render(); window.scrollTo(0, 0); });
 let saveTimer = null;
-function save() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify(S)); setStatus('Enregistré dans ce navigateur ' + new Date().toLocaleTimeString('fr-FR')); }
-    catch (e) { setStatus('⚠ Impossible d\'enregistrer dans le navigateur'); }
-  }, 250);
+function flushSave() {
+  if (!saveTimer) return; clearTimeout(saveTimer); saveTimer = null;
+  if (!S) return;
+  try { libStore(S); setStatus('Enregistré dans ce navigateur ' + new Date().toLocaleTimeString('fr-FR')); }
+  catch (e) { setStatus('⚠ Impossible d\'enregistrer dans le navigateur'); }
 }
+function save() { clearTimeout(saveTimer); saveTimer = setTimeout(flushSave, 250); }
+window.addEventListener('beforeunload', flushSave);
 function saveUi() { try { localStorage.setItem('coordo.ui', JSON.stringify(ui)); } catch (e) {} }
 function setStatus(t) { const el = document.getElementById('status'); if (el) el.textContent = t; }
 const routineById = id => S.routines.find(r => r.id === id) || null;
@@ -204,8 +236,12 @@ function stripEmpty(o) { const r = {}; Object.keys(o).forEach(k => { if (o[k] &&
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const opt = (list, val) => list.map(([v, l]) => `<option value="${esc(v)}"${v === val ? ' selected' : ''}>${esc(l)}</option>`).join('');
 function render() {
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === ui.tab));
   const app = document.getElementById('app');
+  document.body.classList.toggle('is-home', !S);
+  document.getElementById('cur-event').textContent = S ? S.event.name : '';
+  if (!S) { app.innerHTML = renderHome(); document.title = 'Coordo — Événements'; return; }
+  if (ui.tab === 'home') ui.tab = 'conducteur';
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === ui.tab));
   const f = { event: renderEvent, programme: renderProgramme, routines: renderRoutines, conducteur: renderConducteur, fichiers: renderFichiers }[ui.tab] || renderConducteur;
   app.innerHTML = f();
   document.title = 'Coordo — ' + (S.event.name || 'Conducteur');
@@ -437,17 +473,40 @@ function renderConducteur() {
   <p class="print-only muted">Édité le ${new Date().toLocaleString('fr-FR')} — Coordo</p>`;
 }
 
+/* ---------- Accueil : liste des événements ---------- */
+function renderHome() {
+  const l = libRead().sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.updated - a.updated);
+  const fd = d => d ? new Date(d + 'T12:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }) : 'date à définir';
+  return `<div class="home">
+    <div class="home-head"><h1>Mes événements</h1>
+      <div class="toolbar">
+        <button class="btn primary" data-act="home-new">+ Nouvel événement</button>
+        <button class="btn" data-act="file-open">📂 Importer un fichier .json…</button>
+        <button class="btn" data-act="home-demo">Ajouter la démo (Meeting de l'Eure)</button>
+      </div></div>
+    <p class="hint">Les événements sont gardés dans ce navigateur. Un clic ouvre l'événement ; clic molette ou Ctrl+clic pour l'ouvrir dans un nouvel onglet et travailler sur plusieurs à la fois. Pense à exporter un .json de temps en temps pour avoir une sauvegarde (ou pour passer sur un autre ordinateur).</p>
+    <div class="cards">
+    ${l.map(e => `<div class="evcard">
+      <a class="ev-open" href="#e=${e.id}"><div class="ev-date">${esc(fd(e.date))}</div><div class="ev-name">${esc(e.name || 'Sans nom')}</div>
+        <div class="ev-meta">${esc(e.lieu || '')}</div><div class="ev-meta">${e.count} épreuve(s) · modifié le ${new Date(e.updated).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div></a>
+      <div class="ev-actions">
+        <a class="btn small primary" href="#e=${e.id}">Ouvrir</a>
+        <button class="btn small" data-act="home-dup" data-id="${e.id}">Dupliquer</button>
+        <button class="btn small" data-act="home-export" data-id="${e.id}">Exporter .json</button>
+        <button class="btn small danger" data-act="home-del" data-id="${e.id}">Supprimer</button>
+      </div></div>`).join('') || '<p class="muted">Aucun événement. Crée-en un ou importe un fichier.</p>'}
+    </div></div>`;
+}
+
 /* ---------- Onglet Fichiers ---------- */
 function renderFichiers() {
   return `
   <div class="panel"><h2>Fichier de l'événement</h2>
-    <p class="hint">Tout est gardé automatiquement dans ce navigateur. Pour sauvegarder, passer d'un ordinateur à l'autre ou garder plusieurs événements, utilise « Enregistrer le fichier ».</p>
+    <p class="hint">L'événement est gardé automatiquement dans ce navigateur. Le fichier .json sert de sauvegarde ou à passer sur un autre ordinateur. Pour changer d'événement, créer ou dupliquer : bouton « ⌂ Mes événements » en haut à gauche.</p>
     <div class="toolbar">
-      <button class="btn primary" data-act="file-save">💾 Enregistrer le fichier (.json)</button>
-      <button class="btn" data-act="file-open">📂 Ouvrir un fichier…</button>
-      <span class="sep"></span>
-      <button class="btn" data-act="file-new">Nouvel événement vide</button>
-      <button class="btn" data-act="file-demo">Recharger la démo (Meeting de l'Eure)</button>
+      <button class="btn primary" data-act="file-save">💾 Exporter cet événement (.json)</button>
+      <button class="btn" data-act="file-open">📂 Importer un fichier .json (nouvel événement)…</button>
+      <button class="btn" data-act="home-dup" data-id="${S.id}">Dupliquer cet événement</button>
     </div>
   </div>
   <div class="panel" id="import"><h2>Importer un horaire</h2>
@@ -533,12 +592,13 @@ function livePlan() {
       cues: stripEmpty(r.cues || {}), fixed: !!r.fixed, prio: r.prio || 'essentiel', main: !!r.main, sub: !!r.sub,
       of: r.sub ? (names[r.itemId] || '') : '', naming: r.naming || '', wavelight: r.wavelight || '', notes: r.notes || '', type: r.type || (r.main ? 'bloc' : '') };
   });
-  return { event: S.event, postes: S.postes.map(p => ({ id: p.id, label: p.label })), rows: out, publishedAt: Date.now() };
+  if (!S.liveCode) { const a = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; S.liveCode = Array.from({ length: 6 }, () => a[Math.floor(Math.random() * a.length)]).join(''); save(); flushSave(); }
+  return { event: S.event, eventId: S.id, code: S.liveCode, postes: S.postes.map(p => ({ id: p.id, label: p.label })), rows: out, publishedAt: Date.now() };
 }
 function publishLive() {
-  try { localStorage.setItem('coordo.liveplan', JSON.stringify(livePlan())); }
+  try { localStorage.setItem('coordo.liveplan.' + S.id, JSON.stringify(livePlan())); }
   catch (e) { alert('Impossible de préparer le live : ' + e.message); return; }
-  window.open('live.html?regie=1', 'coordo-regie');
+  window.open('live.html?regie=1&e=' + encodeURIComponent(S.id), 'coordo-regie-' + S.id);
 }
 
 /* ---------------- Événements utilisateur ---------------- */
@@ -597,8 +657,24 @@ document.addEventListener('click', e => {
     case 'export-xls': exportXls(); return;
     case 'file-save': download(new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' }), fileBase() + '.json'); return;
     case 'file-open': document.getElementById('file-open').click(); return;
-    case 'file-new': if (!confirm('Créer un événement vide ? (pense à enregistrer le fichier actuel avant)')) return; S = normalize(blankEvent()); ui.tab = 'event'; break;
-    case 'file-demo': if (!confirm('Remplacer l\'événement actuel par la démo Meeting de l\'Eure ?')) return; S = normalize(clone(window.COORDO_DEMO)); break;
+    case 'go-home': flushSave(); location.hash = ''; S = null; render(); return;
+    case 'home-new': { ui.tab = 'event'; saveUi(); openEvent(libAdd(blankEvent())); return; }
+    case 'home-demo': libAdd(clone(window.COORDO_DEMO)); render(); return;
+    case 'home-dup': {
+      flushSave();
+      const src = libLoad(b.dataset.id); if (!src) return;
+      const name = prompt('Nom de la copie :', src.event.name + ' (copie)'); if (name == null) return;
+      const id = libAdd(src, name.trim() || src.event.name);
+      if (S) openEvent(id); else render();
+      return;
+    }
+    case 'home-export': { const d = libLoad(b.dataset.id); if (!d) return; const keep = S; S = d; const n = fileBase(); S = keep; download(new Blob([JSON.stringify(d, null, 1)], { type: 'application/json' }), n + '.json'); return; }
+    case 'home-del': {
+      const e = libRead().find(x => x.id === b.dataset.id); if (!e) return;
+      if (!confirm('Supprimer définitivement « ' + e.name + ' » de ce navigateur ?\n(Exporte-le d\'abord en .json si tu veux le garder.)')) return;
+      localStorage.removeItem(evKey(e.id)); localStorage.removeItem('coordo.liveplan.' + e.id);
+      libWrite(libRead().filter(x => x.id !== e.id)); render(); return;
+    }
     case 'import-go': doImport(); return;
     default: return;
   }
@@ -607,7 +683,7 @@ document.addEventListener('click', e => {
 
 document.addEventListener('change', e => {
   const el = e.target;
-  if (el.dataset.ev) { S.event[el.dataset.ev] = el.value; save(); return; }
+  if (el.dataset.ev) { S.event[el.dataset.ev] = el.value; save(); document.getElementById('cur-event').textContent = S.event.name; return; }
   if (el.dataset.poste != null) { const p = S.postes[+el.dataset.poste]; p[el.dataset.k] = el.type === 'checkbox' ? el.checked : el.value; save(); return; }
   if (el.dataset.zone != null) { S.zones[+el.dataset.zone].label = el.value; save(); return; }
   if (el.dataset.rname != null) { S.routines[+el.dataset.rname].name = el.value; save(); return; }
@@ -623,7 +699,13 @@ document.addEventListener('change', e => {
   if (el.id === 'file-open') {
     const f = el.files[0]; if (!f) return;
     const rd = new FileReader();
-    rd.onload = () => { try { S = normalize(JSON.parse(rd.result)); save(); ui.tab = 'conducteur'; render(); setStatus('Fichier ouvert : ' + f.name); } catch (err) { alert('Fichier illisible : ce n\'est pas un fichier Coordo (.json).'); } el.value = ''; };
+    rd.onload = () => {
+      let id = null;
+      try { const d = JSON.parse(rd.result); if (!d || !d.event) throw new Error(); id = libAdd(d); }
+      catch (err) { alert('Fichier illisible : ce n\'est pas un fichier Coordo (.json).'); }
+      el.value = '';
+      if (id) { flushSave(); ui.tab = 'conducteur'; saveUi(); openEvent(id); setStatus('Fichier importé : ' + f.name); }
+    };
     rd.readAsText(f);
   }
 });

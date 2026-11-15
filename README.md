@@ -6,6 +6,9 @@ Outil de topage pour événements sportifs (athlétisme en priorité).
 - En ligne : https://lenurbinho.github.io/logiciel_coordo/
 - Ou en local : double-cliquer sur `index.html`.
 
+## Mes événements
+L'accueil liste tous les événements gardés dans le navigateur : ouvrir, dupliquer, exporter en .json, supprimer, importer. Un événement par onglet si besoin.
+
 ## Module Conducteur (V1)
 1. **Événement** : nom, date, lieu, postes (colonnes DJ / Speaker / Écran / Lumière / TV / Marketing), zones de compétition.
 2. **Routines** : enchaînements types (présentation → start-list → line-up → épreuve → résultat), calculés à rebours depuis l'heure de l'épreuve.
